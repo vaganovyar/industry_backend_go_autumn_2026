@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"sync"
 	"time"
 )
@@ -16,8 +17,40 @@ type Limiter struct {
 }
 
 func NewLimiter(clock Clock, ratePerSec float64, burst int) *Limiter {
-	panic("TODO: implement")
+	if ratePerSec <= 0 {
+		ratePerSec = 0
+	}
+	return &Limiter{
+		mu:     sync.Mutex{},
+		clock:  clock,
+		rate:   ratePerSec,
+		burst:  burst,
+		tokens: float64(burst),
+		last:   time.Time{},
+	}
 }
 func (l *Limiter) AllowN(n int) bool {
-	panic("TODO: implement")
+	if l.clock == nil {
+		return false
+	}
+	if n <= 0 || n > l.burst {
+		return false
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	now := l.clock.Now()
+	delta := now.Sub(l.last).Seconds()
+	rateTokens := l.rate * delta
+	l.tokens += rateTokens
+	l.tokens = math.Min(l.tokens, float64(l.burst))
+	l.last = now
+
+	if float64(n) <= l.tokens {
+		l.tokens -= float64(n)
+		return true
+	}
+
+	return false
 }
